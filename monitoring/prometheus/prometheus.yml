@@ -1,0 +1,33 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    project: modelhub
+
+scrape_configs:
+  # FastAPI serving — champion instance
+  - job_name: serving-champion
+    static_configs:
+      - targets: ["serving-champion:8000"]
+        labels:
+          role: champion
+    metrics_path: /metrics
+
+  # FastAPI serving — challenger instance
+  - job_name: serving-challenger
+    static_configs:
+      - targets: ["serving-challenger:8000"]
+        labels:
+          role: challenger
+    metrics_path: /metrics
+
+  # Nginx gateway (via nginx-prometheus-exporter sidecar, optional)
+  # Uncomment if nginx exporter is added to docker-compose.yml
+  # - job_name: nginx
+  #   static_configs:
+  #     - targets: ["nginx-exporter:9113"]
+
+  # Prometheus self-monitoring
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

@@ -1,0 +1,135 @@
+{
+  "uid": "modelhub-api",
+  "title": "ModelHub — API Metrics",
+  "tags": ["modelhub", "ml", "serving"],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "15s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Prediction Throughput (req/s)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(prediction_total[1m])) by (model_name)",
+          "legendFormat": "{{model_name}}",
+          "datasource": { "type": "prometheus", "uid": "prometheus" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "lineWidth": 2 }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Champion vs Challenger Split (%)",
+      "type": "piechart",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(increase(prediction_total[5m])) by (model_name)",
+          "legendFormat": "{{model_name}}",
+          "datasource": { "type": "prometheus", "uid": "prometheus" }
+        }
+      ],
+      "options": { "pieType": "pie" }
+    },
+    {
+      "id": 3,
+      "title": "Prediction Latency p50 / p95 / p99 (s)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 8, "w": 24, "h": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(prediction_latency_seconds_bucket[1m])) by (le, model_name))",
+          "legendFormat": "p50 {{model_name}}",
+          "datasource": { "type": "prometheus", "uid": "prometheus" }
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(prediction_latency_seconds_bucket[1m])) by (le, model_name))",
+          "legendFormat": "p95 {{model_name}}",
+          "datasource": { "type": "prometheus", "uid": "prometheus" }
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(prediction_latency_seconds_bucket[1m])) by (le, model_name))",
+          "legendFormat": "p99 {{model_name}}",
+          "datasource": { "type": "prometheus", "uid": "prometheus" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "lineWidth": 2 } }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Error Rate (errors/s)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "rate(prediction_errors_total[1m])",
+          "legendFormat": "errors/s",
+          "datasource": { "type": "prometheus", "uid": "prometheus" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "color": { "fixedColor": "red", "mode": "fixed" } }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Churn Rate per Model (% of requests predicting churn)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(prediction_total{prediction=\"1\"}[5m])) by (model_name) / sum(rate(prediction_total[5m])) by (model_name) * 100",
+          "legendFormat": "churn% {{model_name}}",
+          "datasource": { "type": "prometheus", "uid": "prometheus" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "percent", "min": 0, "max": 100 }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Model Load Time (s)",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 24, "w": 12, "h": 4 },
+      "targets": [
+        {
+          "expr": "model_load_time_seconds",
+          "legendFormat": "{{model_name}}",
+          "datasource": { "type": "prometheus", "uid": "prometheus" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s" }
+      }
+    },
+    {
+      "id": 7,
+      "title": "Total Predictions (last 24h)",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 24, "w": 12, "h": 4 },
+      "targets": [
+        {
+          "expr": "sum(increase(prediction_total[24h])) by (model_name)",
+          "legendFormat": "{{model_name}}",
+          "datasource": { "type": "prometheus", "uid": "prometheus" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short" }
+      }
+    }
+  ]
+}

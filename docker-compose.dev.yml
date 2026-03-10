@@ -1,0 +1,150 @@
+version: "3.9"
+
+# ── ModelHub — Development Stack ─────────────────────────────────────────────
+# Simplified stack without nginx gateway.
+# Serving instances are exposed directly on localhost so you can hit them
+# without routing through nginx.
+#
+#   http://localhost:8000  → serving-champion
+#   http://localhost:8001  → serving-challenger
+#   http://localhost:5001  → MLflow UI
+#   http://localhost:9090  → Prometheus
+#   http://localhost:3000  → Grafana (admin / modelhub)
+#   http://localhost:5432  → PostgreSQL
+#
+# Usage:
+#   docker compose -f docker-compose.dev.yml up --build
+# ─────────────────────────────────────────────────────────────────────────────
+
+networks:
+  backend:
+    driver: bridge
+
+volumes:
+  postgres_data_dev:
+  mlruns_data_dev:
+  prometheus_data_dev:
+  grafana_data_dev:
+
+x-serving-base: &serving-base
+  build:
+    context: .
+    dockerfile: serving/Dockerfile
+  restart: "no"
+  networks:
+    - backend
+  environment:
+    MLFLOW_TRACKING_URI: http://mlflow-server:5001
+    MODEL_NAME: ecommerce-churn-predictor
+    POSTGRES_DSN: postgresql://modelhub:modelhub@postgres:5432/modelhub
+  volumes:
+    - mlruns_data_dev:/app/mlruns
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    restart: "no"
+    networks:
+      - backend
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-modelhub}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-modelhub}
+      POSTGRES_DB: ${POSTGRES_DB:-modelhub}
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-modelhub} -d ${POSTGRES_DB:-modelhub}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mlflow-server:
+    build:
+      context: .
+      dockerfile: mlflow-server/Dockerfile
+    restart: "no"
+    networks:
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      BACKEND_STORE_URI: ${MLFLOW_BACKEND_STORE_URI:-postgresql://modelhub:modelhub@postgres:5432/modelhub}
+      DEFAULT_ARTIFACT_ROOT: /mlruns
+    volumes:
+      - mlruns_data_dev:/mlruns
+    ports:
+      - "5001:5001"
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:5001/health')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  serving-champion:
+    <<: *serving-base
+    container_name: serving-champion-dev
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow-server:5001
+      MODEL_NAME: ecommerce-churn-predictor
+      POSTGRES_DSN: ${POSTGRES_DSN:-postgresql://modelhub:modelhub@postgres:5432/modelhub}
+      CHAMPION_PCT: "100"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mlflow-server:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  serving-challenger:
+    <<: *serving-base
+    container_name: serving-challenger-dev
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow-server:5001
+      MODEL_NAME: ecommerce-churn-predictor
+      POSTGRES_DSN: ${POSTGRES_DSN:-postgresql://modelhub:modelhub@postgres:5432/modelhub}
+      CHAMPION_PCT: "0"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mlflow-server:
+        condition: service_healthy
+    ports:
+      - "8001:8000"
+
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    restart: "no"
+    networks:
+      - backend
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data_dev:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:10.4.3
+    restart: "no"
+    networks:
+      - backend
+    depends_on:
+      - prometheus
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-modelhub}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data_dev:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"

@@ -1,0 +1,83 @@
+# Base training configuration for E-Commerce Customer Churn Prediction
+# Modify experiment_configs/ for per-experiment overrides
+
+experiment:
+  name: "ecommerce-churn-prediction"
+  tracking_uri: "sqlite:///mlruns.db"  # SQLite backend (preferred by MLflow 3.x)
+  artifact_location: "mlruns/artifacts"
+
+data:
+  raw_path: "Data/raw/ecommerce_churn.csv"
+  processed_path: "training/data/processed/features.parquet"
+  target_column: "churn"
+  drop_columns:
+    - "customer_id"
+    - "registration_date"   # datetime — dropped in favour of tenure_months
+  test_size: 0.2
+  random_seed: 42
+
+features:
+  # One-hot encoded
+  categorical_columns:
+    - "country"
+    - "account_age_category"
+    - "subscription_type"
+    - "preferred_category"
+
+  # StandardScaler
+  numeric_columns:
+    - "tenure_months"
+    - "monthly_spend_eur"
+    - "total_spent_eur"
+    - "avg_order_value_eur"
+    - "purchase_frequency_per_month"
+    - "num_product_categories"
+    - "support_tickets_last_month"
+    - "website_sessions_per_month"
+    - "cart_abandonment_rate_percent"
+    - "email_engagement_rate_percent"
+    - "reviews_left_count"
+    - "returns_count_12m"
+    - "last_purchase_days_ago"
+    - "satisfaction_score_1_5"
+    - "loyalty_program_member"    # binary 0/1 — treated as numeric
+    - "payment_methods_used"
+
+  encoding: "onehot"
+
+models:
+  logistic_regression:
+    enabled: true
+    params:
+      C: 1.0
+      max_iter: 1000
+      random_state: 42
+      class_weight: "balanced"
+
+  random_forest:
+    enabled: true
+    params:
+      n_estimators: 200
+      max_depth: 8
+      min_samples_leaf: 10
+      random_state: 42
+      class_weight: "balanced"
+      n_jobs: -1
+
+  xgboost:
+    enabled: true
+    params:
+      n_estimators: 200
+      max_depth: 5
+      learning_rate: 0.05
+      subsample: 0.8
+      colsample_bytree: 0.8
+      scale_pos_weight: 5  # ~83/17 ratio for 16.9% churn rate
+      random_state: 42
+      eval_metric: "logloss"
+
+registration:
+  model_name: "ecommerce-churn-predictor"
+  # Promote to Production if AUC-ROC > threshold
+  promotion_threshold_auc: 0.80
+  primary_metric: "auc_roc"
